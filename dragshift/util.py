@@ -9,6 +9,8 @@ IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".heic", ".heif", ".tif", ".tiff
 PDF_EXTS = {".pdf"}
 DOCX_EXTS = {".docx"}
 TEXT_EXTS = {".txt", ".md", ".csv", ".log", ".json", ".xml", ".html", ".htm"}
+VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".webm", ".avi", ".wmv", ".m4v", ".mpeg", ".mpg"}
+AUDIO_EXTS = {".mp3", ".m4a", ".aac", ".wav", ".flac", ".ogg", ".opus", ".aiff", ".wma"}
 
 
 def category(path: str | Path) -> str | None:
@@ -21,6 +23,10 @@ def category(path: str | Path) -> str | None:
         return "docx"
     if ext in TEXT_EXTS:
         return "text"
+    if ext in VIDEO_EXTS:
+        return "video"
+    if ext in AUDIO_EXTS:
+        return "audio"
     return None
 
 

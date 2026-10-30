@@ -118,6 +118,7 @@ class RadialMenu(QWidget):
         self.is_light = False
         self._serial = 0
         self.got_drag = False
+        self._waiting_for_file = False
         self.hub_armed = False
         self.click_mode = False  # opened from tray/menu instead of a drag
         self._t = 1.0            # pop-in animation 0..1
@@ -205,6 +206,8 @@ class RadialMenu(QWidget):
             for n in (4, 7):  # most common rings: render speculatively
                 self._render(n)
         self._t = 0.0
+        self._waiting_for_file = paths is None and not early
+        self.setWindowOpacity(0.01 if self._waiting_for_file else 1.0)
         self._shape()
         self.show()
         self.raise_()
@@ -356,11 +359,14 @@ class RadialMenu(QWidget):
         return [u.toLocalFile() for u in md.urls() if u.isLocalFile() and u.toLocalFile()]
 
     def dragEnterEvent(self, e):
-        paths = self._local_paths(e.mimeData())
+        paths = [p for p in self._local_paths(e.mimeData()) if Path(p).is_file()]
         if not paths:
             e.ignore()
             return
         self.got_drag = True
+        if self._waiting_for_file:
+            self._waiting_for_file = False
+            self.setWindowOpacity(1.0)
         if resolve_shortcuts(paths) != self.paths:
             self._load(paths)
         e.setDropAction(Qt.CopyAction)  # never let a Shift(=move) drop delete the source

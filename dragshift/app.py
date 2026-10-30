@@ -12,9 +12,9 @@ from PySide6.QtCore import QDir, QObject, QPointF, QRunnable, Qt, QThreadPool, Q
 from PySide6.QtGui import (QAction, QColor, QCursor, QDesktopServices, QGuiApplication, QIcon, QPainter,
                            QPixmap)
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
-from PySide6.QtWidgets import QApplication, QFileDialog, QMenu, QSystemTrayIcon, QWidget
+from PySide6.QtWidgets import QApplication, QFileDialog, QInputDialog, QMenu, QSystemTrayIcon, QWidget
 
-from . import __version__, convert, glass, imaging, report, tools
+from . import __version__, convert, glass, imaging, media, report, tools
 from .radial import Item, RadialMenu
 from .settings import Settings, SettingsWindow, WelcomeWindow, TRIGGERS
 from .toasts import ToastStack
@@ -31,19 +31,26 @@ IPC_NAME = ipc_name()
 
 GLYPHS = {"Compress": "⇲", "Metadata": "ⓘ", "Redact": "▮", "Crop": "⌗", "Edit": "☼",
           "Annotate": "✎", "Add BG": "▣", "Resize": "⤢", "Split": "✂", "Rotate": "⟳",
-          "Merge": "⧉", "Protect": "⚿", "Extract": "⧈"}
+          "Merge": "⧉", "Protect": "⚿", "Extract": "⧈", "Mute": "◖", "Extract audio": "♫",
+          "To GIF": "▧", "Trim": "✂", "Normalize": "≈", "Bitrate": "≋"}
 
 HINTS = {
     "Compress": "Shrink file size", "Metadata": "View · remove GPS", "Redact": "Hide private info",
     "Crop": "Trim to a ratio", "Edit": "Light · colour · rotate", "Annotate": "Arrows · text · steps",
     "Add BG": "Gradient backdrop", "Resize": "Change dimensions", "Split": "One PDF per page",
     "Rotate": "Turn pages 90°", "Merge": "Join into one PDF", "Protect": "Add a password",
-    "Extract": "Save embedded images",
+    "Extract": "Save embedded images", "Mute": "Remove the audio track", "Extract audio": "Save as MP3",
+    "To GIF": "Choose a short clip", "Trim": "Set start and duration", "Normalize": "Even out loudness",
+    "Bitrate": "Choose MP3 quality",
 }
 FORMAT_HINTS = {"JPG": "Small, universal", "PNG": "Lossless · transparency", "WEBP": "Smallest for web",
                 "HEIC": "iPhone format", "TIFF": "Print · archival", "AVIF": "Next-gen, tiny",
                 "BMP": "Uncompressed", "PDF": "Document", "ICO": "Windows icon", "GIF": "Legacy web",
-                "DOCX": "Editable Word", "TXT": "Plain text"}
+                "DOCX": "Editable Word", "TXT": "Plain text", "MP4": "Most compatible video",
+                "MOV": "QuickTime", "MKV": "Flexible container", "WEBM": "Web video",
+                "AVI": "Legacy video", "MP3": "Audio only", "M4A": "AAC audio",
+                "WAV": "Uncompressed audio", "FLAC": "Lossless audio", "OGG": "Vorbis audio",
+                "OPUS": "Compact audio", "AIFF": "Uncompressed audio"}
 
 IMAGE_TOOLS = ["Compress", "Resize", "Crop", "Edit", "Annotate", "Redact", "Add BG", "Metadata"]
 PDF_TOOLS = ["Compress", "Split", "Rotate", "Protect", "Extract", "Metadata"]
@@ -251,6 +258,12 @@ class DragShiftApp(QObject):
         elif cat == "pdf":
             names = PDF_TOOLS[:3] + (["Merge"] if len(same) > 1 else []) + PDF_TOOLS[3:]
             rings["Tools"] = [Item(n, GLYPHS[n], key=f"tool:{n}", hint=HINTS[n]) for n in names]
+        elif cat == "video":
+            names = ["Compress", "Mute", "Extract audio", "To GIF", "Trim", "Resize"]
+            rings["Tools"] = [Item(n, GLYPHS[n], key=f"tool:{n}", hint=HINTS[n]) for n in names]
+        elif cat == "audio":
+            names = ["Compress", "Bitrate", "Normalize", "Trim"]
+            rings["Tools"] = [Item(n, GLYPHS[n], key=f"tool:{n}", hint=HINTS[n]) for n in names]
         return rings
 
     # ------------------------------------------------------------ actions
@@ -282,6 +295,9 @@ class DragShiftApp(QObject):
                             {"Compress": "Compressing…", "Split": "Splitting…", "Rotate": "Rotating…",
                              "Extract": "Extracting images…"}[name])
             return
+        if cat in ("video", "audio"):
+            self.run_media_tool(cat, name, paths)
+            return
         windows = {"Crop": tools.CropWindow, "Add BG": tools.AddBgWindow, "Annotate": tools.AnnotateWindow,
                    "Redact": tools.RedactWindow, "Edit": tools.EditWindow, "Metadata": tools.MetadataWindow}
         try:
@@ -296,6 +312,68 @@ class DragShiftApp(QObject):
         except Exception as e:  # noqa: BLE001
             traceback.print_exc()
             self.toasts.error(f"Couldn't open {name}", friendly_error(e))
+
+    def run_media_tool(self, cat: str, name: str, paths: list[str]):
+        """Collect a small preset from the user, then process media off the UI thread."""
+        if name == "Compress":
+            choices = ["Smaller file", "Balanced", "Higher quality"] if cat == "video" else ["96 kbps", "160 kbps", "256 kbps"]
+            choice, ok = QInputDialog.getItem(None, "Compress", "Preset", choices, 1, False)
+            if not ok:
+                return
+            if cat == "video":
+                crf = {"Smaller file": 31, "Balanced": 27, "Higher quality": 22}[choice]
+                fn = lambda p: media.compress_video(p, crf)
+            else:
+                bitrate = int(choice.split()[0])
+                fn = lambda p: media.compress_audio(p, bitrate)
+            working = "Compressing media…"
+        elif name == "Bitrate":
+            choice, ok = QInputDialog.getItem(None, "Audio bitrate", "MP3 quality",
+                                              ["96 kbps", "128 kbps", "192 kbps", "256 kbps", "320 kbps"], 2, False)
+            if not ok:
+                return
+            bitrate = int(choice.split()[0])
+            fn = lambda p: media.compress_audio(p, bitrate)
+            working = "Changing bitrate…"
+        elif name == "Mute":
+            fn = media.mute_video
+            working = "Removing audio…"
+        elif name == "Extract audio":
+            fn = media.extract_audio
+            working = "Extracting audio…"
+        elif name == "Normalize":
+            fn = media.normalize_audio
+            working = "Normalizing audio…"
+        elif name == "Resize":
+            choice, ok = QInputDialog.getItem(None, "Resize video", "Maximum height",
+                                              ["720p", "1080p", "1440p"], 1, False)
+            if not ok:
+                return
+            height = int(choice.rstrip("p"))
+            fn = lambda p: media.resize_video(p, height)
+            working = "Resizing video…"
+        elif name in ("Trim", "To GIF"):
+            start, ok = QInputDialog.getDouble(None, name, "Start (seconds)", 0, 0, 86400, 2)
+            if not ok:
+                return
+            default_duration = 5 if name == "To GIF" else 10
+            duration, ok = QInputDialog.getDouble(None, name, "Duration (seconds)", default_duration,
+                                                  0.1, 86400, 2)
+            if not ok:
+                return
+            if name == "To GIF":
+                fn = lambda p: media.video_to_gif(p, start, duration)
+                working = "Creating GIF…"
+            elif cat == "video":
+                fn = lambda p: media.trim_video(p, start, duration)
+                working = "Trimming video…"
+            else:
+                fn = lambda p: media.trim_audio(p, start, duration)
+                working = "Trimming audio…"
+        else:
+            return
+        action = f"tool:{name}"
+        self.submit(action, paths, lambda: [fn(p) for p in paths], working)
 
     def open_window(self, w: QWidget):
         if hasattr(w, "submit"):

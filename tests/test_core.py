@@ -102,6 +102,12 @@ def test_paths(tmp_path):
     assert category("x.HEIC") == "image" and category("x.pdf") == "pdf" and category("x.zip") is None
 
 
+def test_supported_file_categories():
+    assert category("clip.mp4") == "video"
+    assert category("song.flac") == "audio"
+    assert category("unsupported.bin") is None
+
+
 @pytest.mark.skipif(__import__("sys").platform != "win32", reason="Windows shortcuts")
 def test_shortcut_resolves_to_target(img, tmp_path):
     import win32com.client

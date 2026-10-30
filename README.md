@@ -66,8 +66,12 @@ You can also right-click a file → **DragShift…**, use **Send to → DragShif
 | PDF | JPG or PNG (one per page), DOCX, TXT | Compress · Split · Rotate · Merge (drop several) · **Protect** (AES-256 password) · **Extract images** · Metadata |
 | Word (.docx) | PDF (uses Microsoft Word if it's installed, otherwise a built-in renderer), TXT | — |
 | Text (.txt, .md, .csv…) | PDF, DOCX | — |
+| Video (MP4, MOV, MKV, WebM, AVI, WMV) | MP4, MOV, MKV, WebM, AVI, GIF, MP3 | Compress · Mute · Extract audio · To GIF · Trim · Resize |
+| Audio (MP3, M4A, WAV, FLAC, OGG, Opus, AIFF, WMA) | MP3, M4A, WAV, FLAC, OGG, Opus, AIFF | Compress · Bitrate · Normalize · Trim |
 
 **Settings** (tray menu): trigger key (Shift, Ctrl or Alt), where results go (next to the original or a `DragShift` subfolder), JPG/WebP quality, PDF → image resolution, and start at login.
+
+Audio and video operations use a local **FFmpeg** executable found on `PATH` (or `DRAGSHIFT_FFMPEG`). Install FFmpeg separately; DragShift does not download it or send files over the network. The drag wheel stays visually hidden until its drop target receives a real local file, so Shift used for typing or dragging text does not show the menu.
 
 ## The look
 
